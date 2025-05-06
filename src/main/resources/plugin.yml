@@ -1,0 +1,10 @@
+name: commision-paper-template
+version: '${version}'
+main: it.buzz.template.TemplatePlugin
+api-version: '1.21.4'
+libraries:
+  - ch.jalu:configme:1.4.1
+  - com.zaxxer:HikariCP:5.1.0
+  - org.mariadb.jdbc:mariadb-java-client:3.2.0
+authors:
+  - Buzz
