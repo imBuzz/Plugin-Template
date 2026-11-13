@@ -2,9 +2,9 @@
 
 # Paper Plugin Template
 
-**Template production-ready per plugin [Paper](https://papermc.io) 26.3 su Java 25.**
-Architettura a servizi, storage asincrono multi-database (SQLite · H2 · MySQL · MariaDB), migrazioni versionate,
-API pubblica con eventi, messaggi MiniMessage, comandi Lamp, test e CI inclusi.
+**A production-ready template for [Paper](https://papermc.io) 26.3 plugins on Java 25.**
+Service-based architecture, async multi-database storage (SQLite · H2 · MySQL · MariaDB), versioned migrations,
+a public API with events, MiniMessage messages, Lamp commands, tests and CI out of the box.
 
 ![Paper](https://img.shields.io/badge/Paper-26.3-blue)
 ![Java](https://img.shields.io/badge/Java-25-orange)
@@ -15,80 +15,80 @@ API pubblica con eventi, messaggi MiniMessage, comandi Lamp, test e CI inclusi.
 
 ---
 
-## Indice
+## Table of contents
 
-1. [Perché questo template](#perché-questo-template)
-2. [Requisiti](#requisiti)
-3. [Avvio rapido](#avvio-rapido)
-4. [Architettura](#architettura)
-5. [Struttura dei package](#struttura-dei-package)
-6. [Ciclo di vita dei servizi](#ciclo-di-vita-dei-servizi)
-7. [Modello di threading](#modello-di-threading)
+1. [Why this template](#why-this-template)
+2. [Requirements](#requirements)
+3. [Quick start](#quick-start)
+4. [Architecture](#architecture)
+5. [Package layout](#package-layout)
+6. [Service lifecycle](#service-lifecycle)
+7. [Threading model](#threading-model)
 8. [Storage](#storage)
-9. [H2 concorrente e multi-processo](#h2-concorrente-e-multi-processo)
-10. [Migrazioni dello schema](#migrazioni-dello-schema)
-11. [Profili giocatore](#profili-giocatore)
-12. [API pubblica per altri plugin](#api-pubblica-per-altri-plugin)
-13. [Messaggi e localizzazione](#messaggi-e-localizzazione)
-14. [Comandi e permessi](#comandi-e-permessi)
-15. [Configurazione completa](#configurazione-completa)
-16. [Librerie e motivazioni](#librerie-e-motivazioni)
-17. [Build, test e CI](#build-test-e-ci)
-18. [Ricette](#ricette)
-19. [Rinominare il template](#rinominare-il-template)
-20. [Aggiornare le versioni](#aggiornare-le-versioni)
+9. [Concurrent and multi-process H2](#concurrent-and-multi-process-h2)
+10. [Schema migrations](#schema-migrations)
+11. [Player profiles](#player-profiles)
+12. [Public API for other plugins](#public-api-for-other-plugins)
+13. [Messages and localization](#messages-and-localization)
+14. [Commands and permissions](#commands-and-permissions)
+15. [Full configuration](#full-configuration)
+16. [Libraries and rationale](#libraries-and-rationale)
+17. [Build, tests and CI](#build-tests-and-ci)
+18. [Recipes](#recipes)
+19. [Renaming the template](#renaming-the-template)
+20. [Updating versions](#updating-versions)
 21. [Troubleshooting](#troubleshooting)
-22. [Cosa è cambiato rispetto alla versione precedente](#cosa-è-cambiato-rispetto-alla-versione-precedente)
-23. [Licenza](#licenza)
+22. [What changed from the previous version](#what-changed-from-the-previous-version)
+23. [License](#license)
 
 ---
 
-## Perché questo template
+## Why this template
 
-| Problema tipico dei plugin | Soluzione nel template |
+| Common plugin problem | How the template solves it |
 |---|---|
-| Query SQL sul main thread che causano lag | Caricamento in `AsyncPlayerPreLoginEvent` e salvataggi su virtual thread: il server thread non tocca mai il database. |
-| Dati persi al riavvio o con Ctrl+C | Autosave periodico dei soli profili modificati, salvataggio al quit, flush sincrono in `onDisable`, executor drenato prima di chiudere il pool. |
-| `Database may be already in use` con H2 | Modalità auto-server: più processi scrivono sullo stesso file contemporaneamente. Testato con 4 JVM in parallelo. |
-| Schema del DB che cambia tra versioni | Migrazioni versionate e transazionali, tracciate in `schema_history`. |
-| SQL diverso per ogni database | Astrazione `SqlDialect`: driver, URL, pool e upsert per ogni engine in una sola classe. |
-| Plugin monolitici impossibili da testare | Servizi con costruttori espliciti, nessun singleton statico, repository dietro un'interfaccia, test su database veri. |
-| Messaggi hardcoded o con codici `&` | `messages.yml` in MiniMessage, placeholder sicuri contro l'injection, reload a caldo. |
-| Jar enormi con tutte le dipendenze | Le librerie vengono scaricate da Paper (`libraries` in `plugin.yml`, generato dal version catalog). Nel jar c'è solo Lamp, rilocato. |
+| SQL queries on the main thread causing lag | Profiles load during `AsyncPlayerPreLoginEvent` and saves run on virtual threads: the server thread never touches the database. |
+| Data lost on restart or Ctrl+C | Periodic autosave of modified profiles only, save on quit, synchronous flush in `onDisable`, and the async executor is drained before the pool closes. |
+| `Database may be already in use` with H2 | Auto-server mode: several processes write to the same file at the same time. Tested with 4 JVMs in parallel. |
+| Database schema changing between releases | Versioned, transactional migrations tracked in `schema_history`. |
+| Different SQL for every database | `SqlDialect` abstraction: driver, URL, pool tuning and upsert for each engine in a single class. |
+| Monolithic, untestable plugins | Services with explicit constructors, no static singletons, storage behind an interface, tests against real databases. |
+| Hardcoded messages or `&` color codes | `messages.yml` in MiniMessage, injection-safe placeholders, hot reload. |
+| Huge jars bundling every dependency | Libraries are downloaded by Paper (`libraries` in `plugin.yml`, generated from the version catalog). Only Lamp is shaded, and it is relocated. |
 
 ---
 
-## Requisiti
+## Requirements
 
-| Strumento | Versione | Note |
+| Tool | Version | Notes |
 |---|---|---|
-| Server | Paper 26.3 | `api-version` generato dal version catalog |
-| JDK per compilare | 25 | Scaricato in automatico da Gradle (foojay) se manca |
-| Gradle | 9.9.1 | Incluso tramite wrapper, non va installato |
+| Server | Paper 26.3 | `api-version` is generated from the version catalog |
+| JDK to build | 25 | Downloaded automatically by Gradle (foojay) when missing |
+| Gradle | 9.9.1 | Bundled through the wrapper, no install needed |
 
 ---
 
-## Avvio rapido
+## Quick start
 
 ```bash
-git clone https://github.com/imBuzz/Plugin-Template.git MioPlugin
-cd MioPlugin
+git clone https://github.com/imBuzz/Plugin-Template.git MyPlugin
+cd MyPlugin
 
-./scripts/rename.sh MioPlugin dev.mionome.mioplugin "MioNome"   # package, classi, permessi, comandi
-./gradlew build                                                 # compila + test
-./gradlew runServer                                             # server Paper di sviluppo con il plugin installato
+./scripts/rename.sh MyPlugin dev.myname.myplugin "MyName"   # package, classes, permissions, commands
+./gradlew build                                             # compile + tests
+./gradlew runServer                                         # dev Paper server with the plugin installed
 ```
 
 Output in `build/libs/`:
 
-| File | Contenuto |
+| File | Contents |
 |---|---|
-| `MioPlugin-<versione>.jar` | Il plugin da mettere in `plugins/` |
-| `MioPlugin-<versione>-api.jar` | Solo il package `api`, per altri plugin che vogliono integrarsi |
+| `MyPlugin-<version>.jar` | The plugin, drop it in `plugins/` |
+| `MyPlugin-<version>-api.jar` | Only the `api` package, for other plugins that want to integrate |
 
 ---
 
-## Architettura
+## Architecture
 
 ```mermaid
 flowchart TD
@@ -111,56 +111,56 @@ flowchart TD
     PS --> REPO[ProfileRepository]
     REPO --> SQL[SqlProfileRepository]
     SQL --> DB
-    PS --> CAF[Caffeine<br/>cache offline]
+    PS --> CAF[Caffeine<br/>offline cache]
 
-    A -. ServicesManager .-> EXT[Altri plugin]
-    PS -. eventi .-> EXT
+    A -. ServicesManager .-> EXT[Other plugins]
+    PS -. events .-> EXT
 ```
 
-Principi:
+Principles:
 
-- **Composition root unico.** Tutte le dipendenze vengono create e collegate in `TemplatePlugin#onEnable`. Leggendo quel metodo si vede l'intero grafo.
-- **Constructor injection.** Ogni classe riceve ciò che le serve dal costruttore. Niente `getInstance()`, niente campi statici mutabili.
-- **Ports & adapters.** `ProfileRepository` è la porta, `SqlProfileRepository` l'adapter. Un'implementazione Redis o in-memory si sostituisce senza toccare `ProfileService`.
-- **Dialetti.** Tutto ciò che cambia tra database sta in `SqlDialect`. Aggiungere un engine significa scrivere una classe e una costante enum.
-- **API separata dall'implementazione.** Il package `api` contiene solo interfacce ed eventi. Gli altri plugin dipendono da quello, mai dalle classi interne.
+- **Single composition root.** Every dependency is created and wired in `TemplatePlugin#onEnable`. Reading that one method shows the whole object graph.
+- **Constructor injection.** Each class receives what it needs through its constructor. No `getInstance()`, no mutable static fields.
+- **Ports and adapters.** `ProfileRepository` is the port, `SqlProfileRepository` the adapter. A Redis or in-memory implementation can be swapped in without touching `ProfileService`.
+- **Dialects.** Everything that differs between databases lives in `SqlDialect`. Adding an engine means writing one class and one enum constant.
+- **API separated from implementation.** The `api` package contains only interfaces and events. Other plugins depend on it, never on internal classes.
 
 ---
 
-## Struttura dei package
+## Package layout
 
-Un solo modulo Gradle, una sola cartella `src`, un solo package radice.
+One Gradle module, one `src` folder, one root package.
 
 ```
 src/main/java/it/buzz/template
 ├── TemplatePlugin.java              composition root
 │
-├── api/                             CONTRATTO PUBBLICO (pubblicato come -api.jar)
+├── api/                             PUBLIC CONTRACT (published as -api.jar)
 │   ├── TemplateApi.java             entry point, TemplateApi.get()
 │   ├── player/
-│   │   ├── PlayerProfile.java       vista del profilo di un giocatore
+│   │   ├── PlayerProfile.java       view of a player's profile
 │   │   └── PlayerProfileService.java
 │   └── event/
-│       ├── PlayerProfileLoadEvent.java    async, al login
-│       └── PlayerProfileUnloadEvent.java  sync, al quit
+│       ├── PlayerProfileLoadEvent.java    async, on login
+│       └── PlayerProfileUnloadEvent.java  sync, on quit
 │
-├── core/                            INFRASTRUTTURA
-│   ├── api/ApiService.java          registra TemplateApi nel ServicesManager
+├── core/                            INFRASTRUCTURE
+│   ├── api/ApiService.java          registers TemplateApi in the ServicesManager
 │   ├── lifecycle/
 │   │   ├── Service.java             enable / disable / reload
-│   │   └── ServiceRegistry.java     ordine, rollback, reload
-│   ├── concurrent/TaskExecutor.java virtual thread + ritorno sul main thread
+│   │   └── ServiceRegistry.java     ordering, rollback, reload
+│   ├── concurrent/TaskExecutor.java virtual threads + hop back to the main thread
 │   ├── config/
 │   │   ├── ConfigService.java
-│   │   ├── PluginConfig.java        schema di config.yml
-│   │   └── MessagesConfig.java      schema di messages.yml
-│   └── message/MessageService.java  MiniMessage + prefix + placeholder sicuri
+│   │   ├── PluginConfig.java        config.yml schema
+│   │   └── MessagesConfig.java      messages.yml schema
+│   └── message/MessageService.java  MiniMessage + prefix + safe placeholders
 │
-├── storage/                         PERSISTENZA
+├── storage/                         PERSISTENCE
 │   ├── database/
-│   │   ├── Database.java            pool HikariCP + migrazioni
-│   │   ├── DatabaseService.java     wrapper Bukkit
-│   │   ├── DatabaseSettings.java    record immutabile, testabile senza server
+│   │   ├── Database.java            HikariCP pool + migrations
+│   │   ├── DatabaseService.java     Bukkit wrapper
+│   │   ├── DatabaseSettings.java    immutable record, testable without a server
 │   │   └── DatabaseType.java        enum -> SqlDialect
 │   ├── dialect/
 │   │   ├── SqlDialect.java
@@ -171,28 +171,28 @@ src/main/java/it/buzz/template
 │   └── migration/
 │       ├── Migration.java
 │       ├── MigrationRunner.java
-│       └── Migrations.java          lista ordinata delle migrazioni
+│       └── Migrations.java          ordered list of migrations
 │
-├── profile/                         DOMINIO: PROFILI GIOCATORE
-│   ├── ProfileData.java             implementazione di PlayerProfile
-│   ├── ProfileSnapshot.java         copia immutabile per il thread di I/O
+├── profile/                         DOMAIN: PLAYER PROFILES
+│   ├── ProfileData.java             PlayerProfile implementation
+│   ├── ProfileSnapshot.java         immutable copy for the I/O thread
 │   ├── ProfileCodec.java            JSON (Gson)
-│   ├── ProfileRepository.java       porta di storage
-│   ├── SqlProfileRepository.java    adapter JDBC
-│   ├── ProfileService.java          cache online, autosave, lookup offline
+│   ├── ProfileRepository.java       storage port
+│   ├── SqlProfileRepository.java    JDBC adapter
+│   ├── ProfileService.java          online cache, autosave, offline lookup
 │   └── ProfileListener.java         login / join / quit
 │
-└── command/                         COMANDI
-    ├── CommandService.java          registrazione Lamp
-    ├── CommandErrorHandler.java     ogni errore -> messages.yml
+└── command/                         COMMANDS
+    ├── CommandService.java          Lamp registration
+    ├── CommandErrorHandler.java     every error -> messages.yml
     └── TemplateCommand.java         /template info | reload | stats
 ```
 
 ---
 
-## Ciclo di vita dei servizi
+## Service lifecycle
 
-Ogni componente implementa `Service`:
+Every component implements `Service`:
 
 ```java
 public interface Service {
@@ -202,19 +202,19 @@ public interface Service {
 }
 ```
 
-`ServiceRegistry` garantisce:
+`ServiceRegistry` guarantees:
 
-| Fase | Comportamento |
+| Phase | Behavior |
 |---|---|
-| `enableAll()` | Abilita i servizi **nell'ordine di registrazione**. Se uno fallisce, quelli già avviati vengono spenti in ordine inverso e il plugin si disabilita con un log chiaro. |
-| `reloadAll()` | Chiamato da `/template reload`, nello stesso ordine di avvio. |
-| `disableAll()` | **Ordine inverso**. Un servizio che lancia un'eccezione non impedisce lo spegnimento degli altri. Chiamarlo due volte non ha effetto. |
+| `enableAll()` | Enables services **in registration order**. If one fails, those already started are disabled in reverse order and the plugin disables itself with a clear log. |
+| `reloadAll()` | Called by `/template reload`, in startup order. |
+| `disableAll()` | **Reverse order**. A service that throws never prevents the others from stopping. Calling it twice is a no-op. |
 
-L'ordine in `TemplatePlugin` è quindi anche l'ordine delle dipendenze: il database parte prima dei profili e si chiude dopo di loro, così il salvataggio finale trova sempre il pool aperto.
+The registration order in `TemplatePlugin` is therefore also the dependency order: the database starts before profiles and stops after them, so the final save always finds the pool open.
 
 ---
 
-## Modello di threading
+## Threading model
 
 ```
  Server thread                         Virtual threads (TaskExecutor.async)
@@ -224,98 +224,98 @@ L'ordine in `TemplatePlugin` è quindi anche l'ordine delle dipendenze: il datab
  PlayerQuitEvent  ── snapshot() ─────▶ repository.save(snapshot)
  /template stats  ── lookup() ───────▶ Caffeine ─▶ repository.findByName()
                   ◀──── thenAcceptAsync(..., executor.main()) ────┘
-                                       AsyncPlayerPreLoginEvent (thread di Paper)
+                                       AsyncPlayerPreLoginEvent (Paper thread)
                                          └─ repository.findOrCreate()
 ```
 
-Regole:
+Rules:
 
-1. I profili si **modificano solo sul server thread**.
-2. Verso il database viaggiano solo **`ProfileSnapshot` immutabili**, serializzati sul server thread. Il thread di I/O non legge mai oggetti mutabili.
-3. Il lavoro bloccante usa `TaskExecutor`, basato su **virtual thread** (Java 21+). A differenza dello scheduler async di Bukkit, viene **drenato allo spegnimento** (fino a 15 secondi), quindi un salvataggio in corso non viene interrotto.
-4. Per tornare sul server thread: `future.thenAcceptAsync(result -> ..., executor.main())`.
+1. Profiles are **mutated only on the server thread**.
+2. Only **immutable `ProfileSnapshot`s**, serialized on the server thread, travel to the database. The I/O thread never reads mutable objects.
+3. Blocking work goes through `TaskExecutor`, built on **virtual threads**. Unlike Bukkit's async scheduler, it is **drained on shutdown** (up to 15 seconds), so an in-flight save is never cut off.
+4. To get back on the server thread: `future.thenAcceptAsync(result -> ..., executor.main())`.
 
 ---
 
 ## Storage
 
-| Backend | Quando usarlo | Scritture concorrenti | Più server | Setup |
+| Backend | When to use it | Concurrent writes | Multiple servers | Setup |
 |---|---|---|---|---|
-| `SQLITE` (default) | Server singolo piccolo/medio | 1 writer, WAL | No | Nessuno, driver incluso in Paper |
-| `H2` | Server singolo con molto I/O, o più server **sulla stessa macchina** | Sì, MVCC per riga | Sì, con `auto-server: true` | Nessuno, driver scaricato da Paper |
-| `MYSQL` | Network con più macchine | Sì | Sì | Database esterno, driver incluso in Paper |
-| `MARIADB` | Network con più macchine | Sì | Sì | Database esterno, driver scaricato da Paper |
+| `SQLITE` (default) | Single small/medium server | 1 writer, WAL | No | None, driver bundled with Paper |
+| `H2` | Single server with heavy I/O, or several servers **on the same machine** | Yes, row-level MVCC | Yes, with `auto-server: true` | None, driver downloaded by Paper |
+| `MYSQL` | Network spanning several machines | Yes | Yes | External database, driver bundled with Paper |
+| `MARIADB` | Network spanning several machines | Yes | Yes | External database, driver downloaded by Paper |
 
-Tuning applicato da ogni dialetto:
+Tuning applied by each dialect:
 
-| Dialetto | Impostazioni |
+| Dialect | Settings |
 |---|---|
-| SQLite | Pool di 1 connessione (niente `SQLITE_BUSY`), `journal_mode=WAL`, `synchronous=NORMAL`, `busy_timeout=5000` |
-| H2 | Pool configurabile, `LOCK_TIMEOUT=10000`, `MAX_COMPACT_TIME=2000`, validazione connessioni, vedi sezione H2 |
-| MySQL / MariaDB | Cache dei prepared statement, `rewriteBatchedStatements`, keepalive 60 s, max lifetime 30 min |
+| SQLite | Pool of 1 connection (no `SQLITE_BUSY`), `journal_mode=WAL`, `synchronous=NORMAL`, `busy_timeout=5000` |
+| H2 | Configurable pool, `LOCK_TIMEOUT=10000`, `MAX_COMPACT_TIME=2000`, connection validation, see the H2 section |
+| MySQL / MariaDB | Prepared statement cache, `rewriteBatchedStatements`, 60 s keepalive, 30 min max lifetime |
 
-L'upsert è atomico su tutti gli engine: `ON CONFLICT DO UPDATE` (SQLite), `MERGE INTO ... KEY` (H2), `ON DUPLICATE KEY UPDATE` (MySQL/MariaDB).
+Upserts are atomic on every engine: `ON CONFLICT DO UPDATE` (SQLite), `MERGE INTO ... KEY` (H2), `ON DUPLICATE KEY UPDATE` (MySQL/MariaDB).
 
-Il prefisso delle tabelle (`database.table-prefix`) è validato con una regex, quindi non può essere usato per SQL injection. La password non compare mai nei log.
+The table prefix (`database.table-prefix`) is validated with a regex, so it cannot be used for SQL injection. The password never appears in logs.
 
 ---
 
-## H2 concorrente e multi-processo
+## Concurrent and multi-process H2
 
-H2 embedded ha alcuni problemi noti. Ecco come li risolve il template (`H2Dialect`):
+Embedded H2 has a few well-known pitfalls. Here is how the template handles them (`H2Dialect`):
 
-| Problema | Causa | Soluzione |
+| Problem | Cause | Fix |
 |---|---|---|
-| `Database may be already in use` | Il file è bloccato dal primo processo che lo apre | `AUTO_SERVER=TRUE`: il primo processo diventa owner e serve il file su localhost, gli altri si collegano in automatico. Se l'owner si spegne, un altro prende il suo posto. |
-| `Database is already closed` allo spegnimento | Lo shutdown hook di H2 chiude il DB **mentre** Paper sta ancora disabilitando i plugin (Ctrl+C, SIGTERM) | In modalità singolo processo: `DB_CLOSE_ON_EXIT=FALSE` e chiusura esplicita del pool in `onDisable`. |
-| `Timeout trying to lock table` sotto carico | Timeout di default di 1 secondo | `LOCK_TIMEOUT=10000` |
-| File `.mv.db` che cresce senza limite | Nessuna compattazione | `MAX_COMPACT_TIME=2000` alla chiusura |
-| `Implicit relative path` | H2 2.x rifiuta i path relativi | Path normalizzato ad assoluto in `DatabaseSettings` |
-| Scritture serializzate | Vecchio motore PageStore | MVStore (default in H2 2.x) con MVCC e lock per riga: il pool usa più connessioni in parallelo |
+| `Database may be already in use` | The file is locked by the first process that opens it | `AUTO_SERVER=TRUE`: the first process becomes the owner and serves the file over localhost; the others connect automatically. If the owner stops, another one takes over. |
+| `Database is already closed` on shutdown | H2's shutdown hook closes the database **while** Paper is still disabling plugins (Ctrl+C, SIGTERM) | In single-process mode: `DB_CLOSE_ON_EXIT=FALSE` and the pool is closed explicitly in `onDisable`. |
+| `Timeout trying to lock table` under load | Default timeout of 1 second | `LOCK_TIMEOUT=10000` |
+| `.mv.db` file growing forever | No compaction | `MAX_COMPACT_TIME=2000` on close |
+| `Implicit relative path` | H2 2.x rejects relative paths | Path normalized to absolute in `DatabaseSettings` |
+| Serialized writes | Old PageStore engine | MVStore (default in H2 2.x) with MVCC and row-level locks: the pool uses several connections in parallel |
 
-**Le due modalità**
+**The two modes**
 
 ```yaml
 database:
   type: H2
   h2:
-    auto-server: false   # singolo server: shutdown sempre sicuro, anche con Ctrl+C
-    auto-server-port: 0  # 0 = porta libera scelta in automatico
+    auto-server: false   # single server: shutdown always safe, even on Ctrl+C
+    auto-server-port: 0  # 0 = pick a free port automatically
 ```
 
-- `auto-server: false` (default): massima sicurezza dei dati per un singolo server.
-- `auto-server: true`: più processi (due server sulla stessa macchina, un pannello web, la console H2) leggono e scrivono **contemporaneamente sullo stesso file**. H2 non permette di combinarlo con `DB_CLOSE_ON_EXIT=FALSE`: con un kill brusco si possono perdere al massimo le modifiche successive all'ultimo autosave. Un normale `/stop` resta sempre sicuro.
+- `auto-server: false` (default): maximum data safety for a single server.
+- `auto-server: true`: several processes (two servers on the same machine, a web panel, the H2 console) read and write **the same file at the same time**. H2 does not allow combining this with `DB_CLOSE_ON_EXIT=FALSE`, so on a hard kill you can lose at most the changes made after the last autosave. A normal `/stop` is always safe.
 
-Entrambe le promesse sono verificate da `H2ConcurrencyTest`:
+Both promises are verified by `H2ConcurrencyTest`:
 
-- `manyThreadsWriteInParallel`: 16 virtual thread × 200 upsert sullo stesso database.
-- `severalProcessesShareTheSameFile`: **3 JVM figlie + la JVM del test** scrivono in parallelo sullo stesso file; alla fine il conteggio delle righe è esatto.
+- `manyThreadsWriteInParallel`: 16 virtual threads × 200 upserts on the same database.
+- `severalProcessesShareTheSameFile`: **3 child JVMs plus the test JVM** write to the same file in parallel; the final row count is exact.
 
-> Due server che modificano **lo stesso giocatore** nello stesso momento seguono la regola last-write-wins. Per network con giocatori che si spostano tra server serve un sistema di lock o messaggistica (Redis, plugin messaging), fuori dallo scopo del template.
+> Two servers modifying **the same player** at the same moment follow last-write-wins. Networks where players move between servers need a locking or messaging layer (Redis, plugin messaging), which is out of scope for this template.
 
 ---
 
-## Migrazioni dello schema
+## Schema migrations
 
 ```java
 public static final List<Migration> ALL = List.of(
     new Migration(1, "create players table", (connection, db) -> { ... }),
-    new Migration(2, "add guilds table",     (connection, db) -> { ... })   // nuove migrazioni in fondo
+    new Migration(2, "add guilds table",     (connection, db) -> { ... })   // append new migrations
 );
 ```
 
-- All'avvio `MigrationRunner` crea `<prefix>schema_history`, legge la versione corrente e applica solo le migrazioni mancanti, **in ordine** e **ognuna in una transazione**.
-- Se una migrazione fallisce viene annullata e il plugin non parte: nessuno schema a metà.
-- Una migrazione già rilasciata non va **mai** modificata. Le modifiche si fanno aggiungendone una nuova.
-- Usa `db.table("nome")` per rispettare il prefisso e `db.dialect()` se ti serve SQL specifico per un engine.
+- On startup `MigrationRunner` creates `<prefix>schema_history`, reads the current version and applies only the missing migrations, **in order** and **each in its own transaction**.
+- If a migration fails it is rolled back and the plugin does not start: no half-applied schema.
+- A released migration must **never** be edited. Changes go into a new one.
+- Use `db.table("name")` to respect the prefix, and `db.dialect()` when you need engine-specific SQL.
 
-Schema iniziale:
+Initial schema:
 
 ```sql
 CREATE TABLE <prefix>players (
     uuid       CHAR(36)    NOT NULL PRIMARY KEY,
     name       VARCHAR(16) NOT NULL,
-    data       TEXT        NOT NULL,   -- JSON del profilo
+    data       TEXT        NOT NULL,   -- profile JSON
     created_at BIGINT      NOT NULL,
     updated_at BIGINT      NOT NULL
 );
@@ -324,47 +324,47 @@ CREATE INDEX idx_<prefix>players_name ON <prefix>players (name);
 
 ---
 
-## Profili giocatore
+## Player profiles
 
-Il ciclo di vita di un profilo:
+Profile lifecycle:
 
-| Momento | Thread | Azione |
+| Moment | Thread | Action |
 |---|---|---|
-| `AsyncPlayerPreLoginEvent` (LOW) | async | `findOrCreate`, profilo in cache, `PlayerProfileLoadEvent` |
-| `AsyncPlayerPreLoginEvent` (MONITOR) | async | Se un altro plugin ha negato l'accesso (ban, whitelist), il profilo viene scartato |
-| `PlayerJoinEvent` | main | `joins++`, aggiornamento nome e `lastSeen` |
-| Autosave (ogni `autosave-interval-seconds`) | main → async | Snapshot dei soli profili modificati, salvati in un unico batch |
-| `PlayerQuitEvent` | main → async | `PlayerProfileUnloadEvent`, snapshot, salvataggio, rimozione dalla cache |
-| `onDisable` | main | Salvataggio sincrono di tutti i profili online |
+| `AsyncPlayerPreLoginEvent` (LOW) | async | `findOrCreate`, profile cached, `PlayerProfileLoadEvent` fired |
+| `AsyncPlayerPreLoginEvent` (MONITOR) | async | If another plugin denied the login (ban, whitelist), the profile is discarded |
+| `PlayerJoinEvent` | main | `joins++`, name and `lastSeen` updated |
+| Autosave (every `autosave-interval-seconds`) | main → async | Snapshot of modified profiles only, saved in a single batch |
+| `PlayerQuitEvent` | main → async | `PlayerProfileUnloadEvent`, snapshot, save, removal from cache |
+| `onDisable` | main | Synchronous save of every online profile |
 
-Se il caricamento fallisce (database irraggiungibile) il giocatore viene disconnesso con un messaggio configurabile, invece di entrare con dati vuoti che poi sovrascriverebbero quelli veri.
+If loading fails (database unreachable) the player is kicked with a configurable message, instead of joining with empty data that would later overwrite the real data.
 
-**Dati personalizzati.** Il contenuto del profilo è salvato come JSON, quindi aggiungere un campo non richiede migrazioni:
+**Custom data.** The profile body is stored as JSON, so adding a field needs no migration:
 
 ```java
 // ProfileData.java
-private int coins;                     // default per i profili già esistenti
+private int coins;                     // default for existing profiles
 
 public int coins() { return coins; }
 
 public void addCoins(int amount) {
     coins += amount;
-    markDirty();                       // verrà salvato al prossimo autosave / quit
+    markDirty();                       // saved on the next autosave / quit
 }
 ```
 
-Per contatori generici c'è già una mappa fastutil:
+Generic counters are already available through a fastutil map:
 
 ```java
 profile.increment("kills", 1);
 int kills = profile.counter("kills");
 ```
 
-**Lookup offline.** `lookup(name)` cerca prima tra i giocatori online e poi nel database, passando da una cache **Caffeine** (1000 voci, 1 minuto). Richieste contemporanee per lo stesso nome producono **una sola query**. La cache viene invalidata quando il giocatore entra o esce, così non restituisce mai dati vecchi.
+**Offline lookups.** `lookup(name)` checks online players first, then the database through a **Caffeine** cache (1000 entries, 1 minute). Concurrent requests for the same name result in **a single query**. The cache is invalidated when the player joins or quits, so it never returns stale data.
 
 ---
 
-## API pubblica per altri plugin
+## Public API for other plugins
 
 ```java
 TemplateApi api = TemplateApi.get();
@@ -376,23 +376,23 @@ api.profiles().lookup("Notch").thenAccept(result ->
         result.ifPresent(p -> getLogger().info(p.name() + " joins: " + p.joins())));
 ```
 
-Eventi:
+Events:
 
 ```java
 @EventHandler
-public void onLoad(PlayerProfileLoadEvent event) {        // async, durante il login
+public void onLoad(PlayerProfileLoadEvent event) {        // async, during login
     if (event.created()) {
         event.profile().increment("welcome_bonus", 100);
     }
 }
 
 @EventHandler
-public void onUnload(PlayerProfileUnloadEvent event) {    // sync, prima del salvataggio
-    event.profile().increment("sessions", 1);             // verrà salvato
+public void onUnload(PlayerProfileUnloadEvent event) {    // sync, before saving
+    event.profile().increment("sessions", 1);             // will be persisted
 }
 ```
 
-Dipendenza per altri plugin (dopo `./gradlew publishToMavenLocal`):
+Dependency for other plugins (after `./gradlew publishToMavenLocal`):
 
 ```kotlin
 dependencies {
@@ -401,15 +401,15 @@ dependencies {
 ```
 
 ```yaml
-# plugin.yml dell'altro plugin
+# plugin.yml of the other plugin
 depend: [PluginTemplate]
 ```
 
 ---
 
-## Messaggi e localizzazione
+## Messages and localization
 
-Tutti i testi stanno in `plugins/<Plugin>/messages.yml` e usano [MiniMessage](https://docs.advntr.dev/minimessage/format.html):
+All text lives in `plugins/<Plugin>/messages.yml` and uses [MiniMessage](https://docs.advntr.dev/minimessage/format.html):
 
 ```yaml
 prefix: '<gradient:#5e4fa2:#f79459>Template</gradient> <dark_gray>»</dark_gray> '
@@ -418,27 +418,27 @@ commands:
     success: '<prefix><green>Configuration reloaded in <white><time></white> ms.'
 ```
 
-- `<prefix>` è disponibile in ogni messaggio.
-- I placeholder (`<time>`, `<player>`, ...) sono inseriti come **testo semplice**: un giocatore chiamato `<red><click:run_command:/op me>` non può iniettare formattazione o click event.
-- Un messaggio vuoto (`''`) non viene inviato, così ogni riga si può disattivare.
-- Le chiavi mancanti vengono aggiunte da sole all'avvio, quelle esistenti non vengono toccate.
-- `/template reload` ricarica i messaggi senza riavviare.
+- `<prefix>` is available in every message.
+- Placeholders (`<time>`, `<player>`, ...) are inserted as **plain text**: a player named `<red><click:run_command:/op me>` cannot inject formatting or click events.
+- An empty message (`''`) is not sent, so any line can be disabled.
+- Missing keys are added automatically on startup; existing ones are never touched.
+- `/template reload` reloads messages without a restart.
 
-Ogni errore del framework dei comandi (argomento mancante, numero non valido, giocatore inesistente, cooldown, ...) usa una chiave della sezione `errors`.
+Every command framework error (missing argument, invalid number, unknown player, cooldown, ...) uses a key from the `errors` section.
 
 ---
 
-## Comandi e permessi
+## Commands and permissions
 
-| Comando | Alias | Permesso | Descrizione |
+| Command | Alias | Permission | Description |
 |---|---|---|---|
-| `/template info` | `/tpl info` | `template.admin` | Versione, storage, profili in memoria |
-| `/template reload` | `/tpl reload` | `template.admin.reload` | Ricarica `config.yml` e `messages.yml` |
-| `/template stats [giocatore]` | `/tpl stats` | `template.admin.stats` | Profilo di un giocatore, anche offline. Senza argomento mostra il proprio |
+| `/template info` | `/tpl info` | `template.admin` | Version, storage, profiles in memory |
+| `/template reload` | `/tpl reload` | `template.admin.reload` | Reloads `config.yml` and `messages.yml` |
+| `/template stats [player]` | `/tpl stats` | `template.admin.stats` | A player's profile, even offline. Without an argument shows your own |
 
-`template.admin` include tutti i sottopermessi. Default: op.
+`template.admin` includes every sub-permission. Default: op.
 
-I comandi usano [Lamp](https://github.com/Revxrsal/Lamp) con supporto Brigadier: suggerimenti, validazione dei tipi e messaggi d'errore arrivano gratis.
+Commands use [Lamp](https://github.com/Revxrsal/Lamp) with Brigadier support: suggestions, type validation and error messages come for free.
 
 ```java
 @Command("homes")
@@ -450,13 +450,13 @@ public final class HomesCommand {
 }
 ```
 
-Registralo in `TemplatePlugin` passandolo al `CommandService`.
+Register it in `TemplatePlugin` by passing it to `CommandService`.
 
 ---
 
-## Configurazione completa
+## Full configuration
 
-`plugins/<Plugin>/config.yml` (generato al primo avvio):
+`plugins/<Plugin>/config.yml` (generated on first start):
 
 ```yaml
 # Prints extra diagnostic information to the console.
@@ -494,52 +494,52 @@ player-data:
 
 ---
 
-## Librerie e motivazioni
+## Libraries and rationale
 
-| Libreria | Versione | Come arriva sul server | Perché |
+| Library | Version | How it reaches the server | Why |
 |---|---|---|---|
-| [Paper API](https://jd.papermc.io/paper/) | 26.3 | Server | Include già Adventure/MiniMessage, Gson, Guava e **fastutil**: si usano senza aggiungere nulla al jar. |
-| [Lamp](https://github.com/Revxrsal/Lamp) | 4.0.1 | Shaded e rilocato | Comandi ad annotazioni, Brigadier, tipi custom, messaggi d'errore sostituibili. |
-| [ConfigMe](https://github.com/AuthMe/ConfigMe) | 1.4.1 | `libraries` | Configurazioni tipizzate, commenti, aggiunta automatica delle chiavi mancanti. |
-| [HikariCP](https://github.com/brettwooldridge/HikariCP) | 7.1.0 | `libraries` | Il pool JDBC più veloce e affidabile. |
-| [H2](https://h2database.com) | 2.5.252 | `libraries` | Database su file con scritture concorrenti e modalità multi-processo. |
-| [MariaDB Connector/J](https://mariadb.com/kb/en/about-mariadb-connector-j/) | 3.5.11 | `libraries` | Driver MariaDB (SQLite e MySQL sono già inclusi in Paper). |
-| [Caffeine](https://github.com/ben-manes/caffeine) | 3.3.1 | `libraries` | Cache ad alte prestazioni: coalescenza delle richieste, scadenza, limite di dimensione. |
-| [fastutil](https://fastutil.di.unimi.it) | 8.5.x | Server (Paper) | Collezioni primitive senza boxing (`Object2IntOpenHashMap`, `Long2ObjectOpenHashMap`, ...). |
+| [Paper API](https://jd.papermc.io/paper/) | 26.3 | Server | Already ships Adventure/MiniMessage, Gson, Guava and **fastutil**: use them without adding anything to the jar. |
+| [Lamp](https://github.com/Revxrsal/Lamp) | 4.0.1 | Shaded and relocated | Annotation commands, Brigadier, custom types, replaceable error messages. |
+| [ConfigMe](https://github.com/AuthMe/ConfigMe) | 1.4.1 | `libraries` | Typed configuration, comments, automatic insertion of missing keys. |
+| [HikariCP](https://github.com/brettwooldridge/HikariCP) | 7.1.0 | `libraries` | The fastest and most reliable JDBC pool. |
+| [H2](https://h2database.com) | 2.5.252 | `libraries` | File database with concurrent writes and multi-process mode. |
+| [MariaDB Connector/J](https://mariadb.com/kb/en/about-mariadb-connector-j/) | 3.5.11 | `libraries` | MariaDB driver (SQLite and MySQL drivers are already bundled with Paper). |
+| [Caffeine](https://github.com/ben-manes/caffeine) | 3.3.1 | `libraries` | High-performance cache: request coalescing, expiry, size bound. |
+| [fastutil](https://fastutil.di.unimi.it) | 8.5.x | Server (Paper) | Primitive collections without boxing (`Object2IntOpenHashMap`, `Long2ObjectOpenHashMap`, ...). |
 
-**Quando usare fastutil.** È utile quando chiavi o valori sono primitivi: contatori, coordinate di chunk impacchettate in `long`, ID numerici. Evita il boxing e riduce memoria e pressione sul GC. Non sostituisce `ConcurrentHashMap` per dati condivisi tra thread, perché le sue mappe non sono thread-safe: per questo la cache dei giocatori online resta una `ConcurrentHashMap`, mentre i contatori del profilo (modificati solo dal server thread) usano `Object2IntOpenHashMap`.
+**When to use fastutil.** It pays off when keys or values are primitives: counters, chunk coordinates packed into a `long`, numeric IDs. It avoids boxing and reduces memory and GC pressure. It does not replace `ConcurrentHashMap` for data shared across threads, because its maps are not thread-safe: that is why the online player cache stays a `ConcurrentHashMap`, while profile counters (mutated only on the server thread) use `Object2IntOpenHashMap`.
 
 ```java
 Long2ObjectOpenHashMap<ChunkData> chunks = new Long2ObjectOpenHashMap<>();
-chunks.put(Chunk.getChunkKey(x, z), data);                // nessun Long boxato
+chunks.put(Chunk.getChunkKey(x, z), data);                // no boxed Long
 
 Object2IntOpenHashMap<String> counters = new Object2IntOpenHashMap<>();
-counters.addTo("kills", 1);                                // un solo lookup
+counters.addTo("kills", 1);                                // single lookup
 ```
 
-**Perché `libraries` e non lo shading.** Paper scarica le librerie una volta sola in `libraries/` e le carica in un classloader dedicato al plugin. Il jar resta di circa 500 KB, non servono relocation e non ci sono conflitti con altri plugin. La lista in `plugin.yml` è generata dal version catalog, quindi c'è un'unica fonte di verità per le versioni.
+**Why `libraries` instead of shading.** Paper downloads libraries once into `libraries/` and loads them in a classloader dedicated to the plugin. The jar stays around 500 KB, no relocation is needed and there are no conflicts with other plugins. The list in `plugin.yml` is generated from the version catalog, so there is a single source of truth for versions.
 
 ---
 
-## Build, test e CI
+## Build, tests and CI
 
 ```bash
-./gradlew build              # compila con -Werror, esegue i test, crea jar e api-jar
-./gradlew test               # solo test
-./gradlew runServer          # Paper 26.3 di sviluppo in ./run
-./gradlew publishToMavenLocal  # pubblica l'api-jar in ~/.m2
+./gradlew build                # compiles with -Werror, runs tests, builds jar and api jar
+./gradlew test                 # tests only
+./gradlew runServer            # Paper 26.3 dev server in ./run
+./gradlew publishToMavenLocal  # publishes the api jar to ~/.m2
 ```
 
-Test inclusi (JUnit 6):
+Included tests (JUnit 6):
 
-| Classe | Cosa verifica |
+| Class | What it verifies |
 |---|---|
-| `ServiceRegistryTest` | Ordine di avvio e spegnimento, rollback se l'avvio fallisce, spegnimento robusto |
-| `DatabaseTypeTest` | SQL di upsert per ogni dialetto, URL H2, validazione del prefisso, password nascosta nei log |
-| `SqlProfileRepositoryTest` | Eseguito **due volte, su SQLite e su H2**: creazione, reload, rinomina, batch, contatori fastutil, compatibilità del JSON, idempotenza delle migrazioni |
-| `H2ConcurrencyTest` | 16 thread in parallelo e **4 processi JVM** sullo stesso file H2 |
+| `ServiceRegistryTest` | Startup and shutdown order, rollback on failed startup, resilient shutdown |
+| `DatabaseTypeTest` | Upsert SQL for every dialect, H2 URLs, prefix validation, password hidden from logs |
+| `SqlProfileRepositoryTest` | Runs **twice, on SQLite and on H2**: creation, reload, rename, batch, fastutil counters, JSON compatibility, idempotent migrations |
+| `H2ConcurrencyTest` | 16 parallel threads and **4 JVM processes** on the same H2 file |
 
-GitHub Actions (`.github/workflows/build.yml`) compila e testa a ogni push e pull request, carica il jar come artifact e, con un tag `v*`, crea una release con i jar allegati:
+GitHub Actions (`.github/workflows/build.yml`) builds and tests on every push and pull request, uploads the jar as an artifact and, on a `v*` tag, creates a release with the jars attached:
 
 ```bash
 git tag v1.0.0 && git push --tags
@@ -547,59 +547,59 @@ git tag v1.0.0 && git push --tags
 
 ---
 
-## Ricette
+## Recipes
 
-**Nuovo servizio**
+**New service**
 
 ```java
 public final class EconomyService implements Service {
     private final ProfileService profiles;
     public EconomyService(ProfileService profiles) { this.profiles = profiles; }
-    @Override public void enable() { /* listener, task, ... */ }
+    @Override public void enable() { /* listeners, tasks, ... */ }
     @Override public void disable() { /* cleanup */ }
 }
 ```
 
 ```java
-// TemplatePlugin#onEnable, dopo le sue dipendenze
+// TemplatePlugin#onEnable, after its dependencies
 services.register(new EconomyService(profiles));
 ```
 
-**Nuova tabella**: aggiungi una `Migration` con la versione successiva, poi crea un repository sul modello di `SqlProfileRepository` usando `database.dialect().upsert(...)`.
+**New table**: add a `Migration` with the next version, then write a repository modeled on `SqlProfileRepository` using `database.dialect().upsert(...)`.
 
-**Nuovo backend di storage** (Redis, Mongo, ...): implementa `ProfileRepository` e passalo a `ProfileService`.
+**New storage backend** (Redis, Mongo, ...): implement `ProfileRepository` and pass it to `ProfileService`.
 
-**Nuovo database SQL**: implementa `SqlDialect` e aggiungi la costante in `DatabaseType`.
+**New SQL database**: implement `SqlDialect` and add a constant to `DatabaseType`.
 
-**Lavoro bloccante (HTTP, file, DB)**
+**Blocking work (HTTP, files, DB)**
 
 ```java
 executor.supplyAsync(() -> httpClient.fetch(url))
         .thenAcceptAsync(result -> player.sendMessage(result), executor.main());
 ```
 
-**Nuovo messaggio**: aggiungi una `Property<String>` in `MessagesConfig` e usa `messages.send(sender, KEY, arg("nome", valore))`.
+**New message**: add a `Property<String>` to `MessagesConfig` and call `messages.send(sender, KEY, arg("name", value))`.
 
 ---
 
-## Rinominare il template
+## Renaming the template
 
 ```bash
 ./scripts/rename.sh SuperHomes dev.sam.superhomes Sam
 ```
 
-Lo script (compatibile con macOS e Linux):
+The script (works on macOS and Linux):
 
-- sposta `it/buzz/template` nel nuovo package, sia in `main` che in `test`;
-- rinomina `TemplatePlugin`, `TemplateCommand`, `TemplateApi`;
-- aggiorna permessi (`superhomes.admin`), comando (`/superhomes`), prefisso delle tabelle;
-- aggiorna `group`, autore, nome del progetto e `plugin.yml`.
+- moves `it/buzz/template` to the new package, in both `main` and `test`;
+- renames `TemplatePlugin`, `TemplateCommand`, `TemplateApi`;
+- updates permissions (`superhomes.admin`), command (`/superhomes`) and table prefix;
+- updates `group`, author, project name and `plugin.yml`.
 
 ---
 
-## Aggiornare le versioni
+## Updating versions
 
-Tutto è in `gradle/libs.versions.toml`:
+Everything lives in `gradle/libs.versions.toml`:
 
 ```toml
 [versions]
@@ -608,50 +608,50 @@ paper = "26.3.build.249-stable"
 minecraft = "26.3"
 ```
 
-Cambiando `paper` e `minecraft` si aggiornano anche `api-version` in `plugin.yml` e la versione del server di `runServer`. Le librerie runtime aggiornate qui finiscono da sole nella lista `libraries`.
+Changing `paper` and `minecraft` also updates `api-version` in `plugin.yml` and the server version used by `runServer`. Runtime libraries bumped here end up in the `libraries` list automatically.
 
 ---
 
 ## Troubleshooting
 
-| Sintomo | Soluzione |
+| Symptom | Fix |
 |---|---|
-| `Startup failed, disabling plugin` | Leggi l'eccezione sotto: di solito credenziali o host del database errati. Il plugin non parte a metà. |
-| `Your data could not be loaded` al login | Il database non risponde. Il giocatore viene bloccato apposta per non sovrascrivere i dati veri. |
-| `Database may be already in use` con H2 | Imposta `database.h2.auto-server: true`. |
-| Porta occupata con H2 auto-server | Lascia `auto-server-port: 0` oppure scegli una porta libera. |
-| Messaggi con tag visibili tipo `<red>` | Sintassi MiniMessage non valida in `messages.yml`: verifica che i tag siano chiusi correttamente. |
-| Lag allo spegnimento con molti giocatori | Normale: il flush finale è sincrono per non perdere dati. Abbassa `autosave-interval-seconds` per ridurre il lavoro. |
+| `Startup failed, disabling plugin` | Read the exception below it: usually wrong database credentials or host. The plugin never starts half-initialized. |
+| `Your data could not be loaded` on login | The database is not responding. The player is blocked on purpose so real data is not overwritten. |
+| `Database may be already in use` with H2 | Set `database.h2.auto-server: true`. |
+| Port in use with H2 auto-server | Keep `auto-server-port: 0` or pick a free port. |
+| Raw tags like `<red>` visible in chat | Invalid MiniMessage syntax in `messages.yml`: check that tags are closed properly. |
+| Slow shutdown with many players | Expected: the final flush is synchronous so no data is lost. Lower `autosave-interval-seconds` to reduce the work. |
 
 ---
 
-## Cosa è cambiato rispetto alla versione precedente
+## What changed from the previous version
 
-Bug corretti:
+Bugs fixed:
 
-| Bug | Effetto |
+| Bug | Effect |
 |---|---|
-| Dipendenza `loadit 1.2.2-SNAPSHOT` presente solo in `mavenLocal` | Il progetto non compilava su nessun'altra macchina |
-| `registerTypeHierarchyAdapter` con un `TypeAdapterFactory` | `IllegalArgumentException` al caricamento della classe principale: il plugin non partiva |
-| Il type adapter scriveva sempre `null` | Ogni dato del giocatore veniva perso al salvataggio |
-| `INSERT` senza la colonna `data JSON NOT NULL` | Errore alla creazione di ogni nuovo giocatore |
-| URL `jdbc:mysql://` con il driver MariaDB 3.x | Il driver rifiuta lo schema `mysql`: connessione impossibile |
-| Pool creato nel costruttore fuori dal `try` | Database irraggiungibile = eccezione non gestita e `NullPointerException` in `onDisable` |
-| Comandi registrati anche dopo il fallimento del database | Plugin disabilitato con comandi ancora attivi |
-| UUID concatenato nella query | SQL costruito a mano invece di un parametro |
-| Compilato per Paper 1.20.4 con `api-version: 1.21.4` | Incoerenza tra API e versione dichiarata |
-| `@Command("")` vuoto, tabella `weekend_boost_data` | Residui di un altro progetto |
+| `loadit 1.2.2-SNAPSHOT` dependency available only in `mavenLocal` | The project did not compile on any other machine |
+| `registerTypeHierarchyAdapter` given a `TypeAdapterFactory` | `IllegalArgumentException` while loading the main class: the plugin never started |
+| The type adapter always wrote `null` | All player data was lost on every save |
+| `INSERT` without the `data JSON NOT NULL` column | Every new player failed to be created |
+| `jdbc:mysql://` URL with the MariaDB 3.x driver | The driver rejects the `mysql` scheme: no connection possible |
+| Pool created in the constructor outside the `try` | Unreachable database = unhandled exception and `NullPointerException` in `onDisable` |
+| Commands registered even after the database failed | Disabled plugin with commands still active |
+| UUID concatenated into the query | Hand-built SQL instead of a bound parameter |
+| Compiled against Paper 1.20.4 with `api-version: 1.21.4` | Mismatch between API and declared version |
+| Empty `@Command("")`, `weekend_boost_data` table | Leftovers from another project |
 
-Miglioramenti: Paper 26.3, Java 25, Gradle 9.9 con Kotlin DSL e version catalog, architettura a servizi, multi-database con dialetti, H2 multi-processo, migrazioni, profili asincroni con autosave, API ed eventi, MiniMessage, Caffeine, fastutil, test, CI e release automatiche, script di rinomina.
+Improvements: Paper 26.3, Java 25, Gradle 9.9 with Kotlin DSL and version catalog, service architecture, multi-database support through dialects, multi-process H2, migrations, async profiles with autosave, API and events, MiniMessage, Caffeine, fastutil, tests, CI and automatic releases, rename script.
 
 ---
 
-## Licenza
+## License
 
-Distribuito con licenza [MIT](LICENSE). Puoi usarlo, modificarlo, ridistribuirlo e venderlo, anche in progetti commerciali e closed source. L'unica condizione è mantenere l'avviso di copyright e il testo della licenza nelle copie del codice sorgente.
+Released under the [MIT](LICENSE) license. You can use, modify, redistribute and sell it, including in commercial and closed-source projects. The only condition is keeping the copyright notice and license text in copies of the source code.
 
 ---
 
 <div align="center">
-Creato da <a href="https://github.com/imBuzz">Buzz</a>
+Made by <a href="https://github.com/imBuzz">Buzz</a>
 </div>
