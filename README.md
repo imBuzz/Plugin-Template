@@ -9,6 +9,7 @@ API pubblica con eventi, messaggi MiniMessage, comandi Lamp, test e CI inclusi.
 ![Paper](https://img.shields.io/badge/Paper-26.3-blue)
 ![Java](https://img.shields.io/badge/Java-25-orange)
 ![Gradle](https://img.shields.io/badge/Gradle-9.9-02303A)
+![License](https://img.shields.io/badge/license-MIT-green)
 
 </div>
 
@@ -38,6 +39,7 @@ API pubblica con eventi, messaggi MiniMessage, comandi Lamp, test e CI inclusi.
 20. [Aggiornare le versioni](#aggiornare-le-versioni)
 21. [Troubleshooting](#troubleshooting)
 22. [Cosa è cambiato rispetto alla versione precedente](#cosa-è-cambiato-rispetto-alla-versione-precedente)
+23. [Licenza](#licenza)
 
 ---
 
@@ -641,6 +643,12 @@ Bug corretti:
 | `@Command("")` vuoto, tabella `weekend_boost_data` | Residui di un altro progetto |
 
 Miglioramenti: Paper 26.3, Java 25, Gradle 9.9 con Kotlin DSL e version catalog, architettura a servizi, multi-database con dialetti, H2 multi-processo, migrazioni, profili asincroni con autosave, API ed eventi, MiniMessage, Caffeine, fastutil, test, CI e release automatiche, script di rinomina.
+
+---
+
+## Licenza
+
+Distribuito con licenza [MIT](LICENSE). Puoi usarlo, modificarlo, ridistribuirlo e venderlo, anche in progetti commerciali e closed source. L'unica condizione è mantenere l'avviso di copyright e il testo della licenza nelle copie del codice sorgente.
 
 ---
 
