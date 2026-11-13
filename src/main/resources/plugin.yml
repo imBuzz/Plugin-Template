@@ -1,10 +1,21 @@
-name: commision-paper-template
-version: '${version}'
-main: it.buzz.template.TemplatePlugin
-api-version: '1.21.4'
+name: ${name}
+version: "${version}"
+main: ${main}
+description: "${description}"
+api-version: "${apiVersion}"
+authors: ${authors}
+# Downloaded by Paper at startup (kept out of the jar). Generated from gradle/libs.versions.toml.
 libraries:
-  - ch.jalu:configme:1.4.1
-  - com.zaxxer:HikariCP:5.1.0
-  - org.mariadb.jdbc:mariadb-java-client:3.2.0
-authors:
-  - Buzz
+${libraries}
+
+permissions:
+  template.admin:
+    description: Access to /template
+    default: op
+    children:
+      template.admin.reload: true
+      template.admin.stats: true
+  template.admin.reload:
+    default: op
+  template.admin.stats:
+    default: op

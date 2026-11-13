@@ -1,59 +1,56 @@
 package it.buzz.template;
 
-import ch.jalu.configme.SettingsManager;
-import ch.jalu.configme.SettingsManagerBuilder;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import it.buzz.template.commands.CustomExceptionAdapter;
-import it.buzz.template.commands.PluginCommands;
-import it.buzz.template.config.PluginConfiguration;
-import it.buzz.template.manager.database.adapter.TemplatePlayerDataAdapterFactory;
-import it.buzz.template.manager.database.DatabaseManager;
-import it.buzz.template.manager.player.TemplatePlayerData;
-import lombok.Getter;
+import it.buzz.template.command.CommandErrorHandler;
+import it.buzz.template.command.CommandService;
+import it.buzz.template.command.TemplateCommand;
+import it.buzz.template.core.api.ApiService;
+import it.buzz.template.core.concurrent.TaskExecutor;
+import it.buzz.template.core.config.ConfigService;
+import it.buzz.template.core.config.PluginConfig;
+import it.buzz.template.core.lifecycle.ServiceRegistry;
+import it.buzz.template.core.message.MessageService;
+import it.buzz.template.profile.ProfileService;
+import it.buzz.template.storage.database.DatabaseService;
 import org.bukkit.plugin.java.JavaPlugin;
-import revxrsal.commands.Lamp;
-import revxrsal.commands.bukkit.BukkitLamp;
-import revxrsal.commands.bukkit.actor.BukkitCommandActor;
 
-import java.io.File;
+import java.util.logging.Level;
 
+/**
+ * Composition root. Builds every service, wires dependencies through constructors and hands them to the
+ * {@link ServiceRegistry}, which enables them in this order and disables them in reverse.
+ * <p>
+ * No static singletons: other plugins use {@link it.buzz.template.api.TemplateApi#get()}.
+ */
 public final class TemplatePlugin extends JavaPlugin {
 
-    public static Gson GSON = new GsonBuilder()
-            .registerTypeHierarchyAdapter(TemplatePlayerData.class, new TemplatePlayerDataAdapterFactory())
-            .create();
-
-    @Getter private SettingsManager settingsManager;
-    @Getter private DatabaseManager databaseManager;
-
-    private Lamp<BukkitCommandActor> commandHandler;
+    private final ServiceRegistry services = new ServiceRegistry(getLogger());
 
     @Override
     public void onEnable() {
-        settingsManager = SettingsManagerBuilder
-                .withYamlFile(new File(getDataFolder().getAbsolutePath() + File.separator + "config.yml"))
-                .configurationData(PluginConfiguration.class)
-                .useDefaultMigrationService()
-                .create();
+        long start = System.currentTimeMillis();
+        try {
+            ConfigService config = services.register(new ConfigService(getDataFolder().toPath()));
+            config.enable(); // needed to build the rest of the graph
 
-        databaseManager = new DatabaseManager(this);
-        databaseManager.start();
+            TaskExecutor executor = services.register(new TaskExecutor(this));
+            MessageService messages = services.register(new MessageService(config));
+            DatabaseService database = services.register(new DatabaseService(this, config));
+            ProfileService profiles = services.register(new ProfileService(this, config, database, executor, messages));
+            services.register(new CommandService(this, new CommandErrorHandler(messages, this),
+                    new TemplateCommand(this, services, messages, profiles, executor, config.get(PluginConfig.DB_TYPE).name())));
+            services.register(new ApiService(this, profiles));
 
-        setupCommands();
+            services.enableAll();
+        } catch (Exception e) {
+            getLogger().log(Level.SEVERE, "Startup failed, disabling plugin", e);
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+        getLogger().info("Enabled in " + (System.currentTimeMillis() - start) + " ms");
     }
 
     @Override
     public void onDisable() {
-        databaseManager.stop();
+        services.disableAll();
     }
-
-    private void setupCommands() {
-        commandHandler = BukkitLamp.builder(this)
-                .exceptionHandler(new CustomExceptionAdapter(this))
-                .build();
-
-        commandHandler.register(new PluginCommands(this));
-    }
-
 }

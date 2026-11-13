@@ -1,5 +1,21 @@
-# Project exclude paths
-/.gradle/
-/.idea
-**/build/
-/paper/run
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+bin/
+out/
+
+# Dev server (run-paper)
+run/
+
+# OS
+.DS_Store
+Thumbs.db
